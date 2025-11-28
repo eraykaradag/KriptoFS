@@ -1,0 +1,13 @@
+[package]
+name = "kriptofs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aes-gcm = "0.10.3"
+base64 = "0.22.1"
+clap = "4.5.53"
+env_logger = "0.11.8"
+fuser = "0.16.0"
+libc = "0.2.177"
+log = "0.4.28"
