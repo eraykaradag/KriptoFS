@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::cryption;
+
 const TTL: Duration = Duration::from_secs(1); // 1 second
 
 const HELLO_DIR_ATTR: FileAttr = FileAttr {
@@ -219,12 +221,14 @@ impl Filesystem for KriptoFs {
         reply: fuser::ReplyWrite,
     ) {
         if let Some(file_content) = self.file_data.get_mut(&ino) {
-            let end = offset as usize + data.len();
+            let encrypted_data = cryption::encrypt_message(data);
+
+            let end = offset as usize + encrypted_data.len();
 
             if end > file_content.len() {
                 file_content.resize(end, 0);
             }
-            file_content[offset as usize..end].copy_from_slice(data);
+            file_content[offset as usize..end].copy_from_slice(&encrypted_data);
 
             if let Some(attr) = self.attrs.get_mut(&ino) {
                 attr.size = file_content.len() as u64;
@@ -246,10 +250,16 @@ impl Filesystem for KriptoFs {
         lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
+        let file_owner = self.attrs.get(&ino).expect("File not exist").uid;
         if let Some(file_content) = self.file_data.get(&ino) {
             if offset < file_content.len() as i64 {
                 let data = &file_content[offset as usize..];
-                reply.data(data);
+                if _req.uid() == file_owner {
+                    let decrypted_data = cryption::decrypt_message(data);
+                    reply.data(&decrypted_data);
+                } else {
+                    reply.data(data);
+                }
             } else {
                 reply.data(&[]); //EOF
             }
@@ -304,7 +314,7 @@ impl Filesystem for KriptoFs {
             free_blocks,
             free_blocks,
             1000000,
-            1000000 - self.attrs.len() as u64, // Kalan Inode
+            1000000 - self.attrs.len() as u64,
             block_size as u32,
             255,
             block_size as u32,

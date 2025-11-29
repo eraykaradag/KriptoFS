@@ -3,6 +3,7 @@ use fuser::MountOption;
 
 use crate::kriptofs::KriptoFs;
 
+pub mod cryption;
 mod kriptofs;
 
 fn main() {
