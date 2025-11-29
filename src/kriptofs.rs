@@ -1,7 +1,7 @@
 use fuser::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, Request,
 };
-use libc::{ENOENT, ENOTDIR};
+use libc::{EEXIST, ENOENT, ENOTDIR};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::time::{Duration, UNIX_EPOCH};
@@ -109,5 +109,51 @@ impl Filesystem for KriptoFs {
             }
         }
         reply.ok();
+    }
+    fn mkdir(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        mode: u32,
+        umask: u32,
+        reply: ReplyEntry,
+    ) {
+        let name_str = name.to_str().unwrap().to_string();
+
+        if let Some(children) = self.tree.get(&parent) {
+            if children.contains_key(&name_str) {
+                reply.error(EEXIST);
+                return;
+            }
+        }
+
+        let ino = self.next_inode;
+        self.next_inode += 1;
+
+        let attr = FileAttr {
+            ino,
+            size: 0,
+            blocks: 0,
+            atime: UNIX_EPOCH, // 1970-01-01 00:00:00
+            mtime: UNIX_EPOCH,
+            ctime: UNIX_EPOCH,
+            crtime: UNIX_EPOCH,
+            kind: FileType::Directory,
+            perm: 0o755,
+            nlink: 2,
+            uid: 501,
+            gid: 20,
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        };
+
+        self.attrs.insert(ino, attr);
+        self.tree.insert(ino, BTreeMap::new());
+        self.tree.entry(parent).or_default().insert(name_str, ino);
+        self.parents.insert(ino, parent);
+
+        reply.entry(&TTL, &attr, 0);
     }
 }
