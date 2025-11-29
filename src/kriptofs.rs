@@ -257,4 +257,57 @@ impl Filesystem for KriptoFs {
             reply.error(ENOENT);
         }
     }
+    fn setattr(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        mode: Option<u32>,
+        uid: Option<u32>,
+        gid: Option<u32>,
+        size: Option<u64>,
+        _atime: Option<fuser::TimeOrNow>,
+        _mtime: Option<fuser::TimeOrNow>,
+        _ctime: Option<std::time::SystemTime>,
+        fh: Option<u64>,
+        _crtime: Option<std::time::SystemTime>,
+        _chgtime: Option<std::time::SystemTime>,
+        _bkuptime: Option<std::time::SystemTime>,
+        flags: Option<u32>,
+        reply: ReplyAttr,
+    ) {
+        if let Some(new_size) = size {
+            if let Some(file_content) = self.file_data.get_mut(&ino) {
+                file_content.resize(new_size as usize, 0);
+            }
+            if let Some(attr) = self.attrs.get_mut(&ino) {
+                attr.size = new_size;
+            }
+        }
+        reply.attr(&TTL, self.attrs.get(&ino).unwrap());
+    }
+    fn statfs(&mut self, _req: &Request<'_>, _ino: u64, reply: fuser::ReplyStatfs) {
+        let block_size = 512;
+
+        let total_capacity_bytes: u64 = 1024 * 1024 * 1024;
+        let total_blocks = total_capacity_bytes / block_size;
+
+        let mut used_bytes: u64 = 0;
+        for data in self.file_data.values() {
+            used_bytes += data.len() as u64;
+        }
+
+        let used_blocks = (used_bytes + block_size - 1) / block_size;
+
+        let free_blocks = total_blocks.saturating_sub(used_blocks);
+        reply.statfs(
+            total_blocks,
+            free_blocks,
+            free_blocks,
+            1000000,
+            1000000 - self.attrs.len() as u64, // Kalan Inode
+            block_size as u32,
+            255,
+            block_size as u32,
+        );
+    }
 }
