@@ -28,7 +28,7 @@ fn main() {
         .get_matches();
     env_logger::init();
     let mountpoint = matches.get_one::<String>("MOUNT_POINT").unwrap();
-    let mut options = vec![MountOption::FSName("kriptofs".to_string())];
+    let mut options = vec![MountOption::RW, MountOption::FSName("kriptofs".to_string())];
     if matches.get_flag("auto_unmount") {
         options.push(MountOption::AutoUnmount);
     }

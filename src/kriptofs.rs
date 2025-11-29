@@ -29,6 +29,7 @@ pub struct KriptoFs {
     attrs: BTreeMap<u64, FileAttr>,
     tree: BTreeMap<u64, BTreeMap<String, u64>>,
     parents: BTreeMap<u64, u64>,
+    file_data: BTreeMap<u64, Vec<u8>>,
     next_inode: u64,
 }
 impl KriptoFs {
@@ -37,6 +38,7 @@ impl KriptoFs {
             attrs: BTreeMap::new(),
             tree: BTreeMap::new(),
             parents: BTreeMap::new(),
+            file_data: BTreeMap::new(),
             next_inode: 2,
         };
 
@@ -155,5 +157,103 @@ impl Filesystem for KriptoFs {
         self.parents.insert(ino, parent);
 
         reply.entry(&TTL, &attr, 0);
+    }
+    fn create(
+        &mut self,
+        _req: &Request<'_>,
+        parent: u64,
+        name: &OsStr,
+        mode: u32,
+        umask: u32,
+        flags: i32,
+        reply: fuser::ReplyCreate,
+    ) {
+        let name_str = name.to_str().unwrap().to_string();
+
+        if let Some(children) = self.tree.get(&parent) {
+            if children.contains_key(&name_str) {
+                reply.error(EEXIST);
+                return;
+            }
+        }
+
+        let ino = self.next_inode;
+        self.next_inode += 1;
+
+        let attr = FileAttr {
+            ino,
+            size: 0,
+            blocks: 0,
+            atime: UNIX_EPOCH, // 1970-01-01 00:00:00
+            mtime: UNIX_EPOCH,
+            ctime: UNIX_EPOCH,
+            crtime: UNIX_EPOCH,
+            kind: FileType::RegularFile,
+            perm: 0o644,
+            nlink: 1,
+            uid: 501,
+            gid: 20,
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        };
+
+        self.attrs.insert(ino, attr);
+        self.file_data.insert(ino, Vec::new());
+        self.tree.entry(parent).or_default().insert(name_str, ino);
+        self.parents.insert(ino, parent);
+
+        reply.created(&TTL, &attr, 0, 0, 0);
+    }
+    fn write(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        data: &[u8],
+        write_flags: u32,
+        flags: i32,
+        lock_owner: Option<u64>,
+        reply: fuser::ReplyWrite,
+    ) {
+        if let Some(file_content) = self.file_data.get_mut(&ino) {
+            let end = offset as usize + data.len();
+
+            if end > file_content.len() {
+                file_content.resize(end, 0);
+            }
+            file_content[offset as usize..end].copy_from_slice(data);
+
+            if let Some(attr) = self.attrs.get_mut(&ino) {
+                attr.size = file_content.len() as u64;
+            }
+
+            reply.written(data.len() as u32);
+        } else {
+            reply.error(ENOENT);
+        }
+    }
+    fn read(
+        &mut self,
+        _req: &Request<'_>,
+        ino: u64,
+        fh: u64,
+        offset: i64,
+        size: u32,
+        flags: i32,
+        lock_owner: Option<u64>,
+        reply: ReplyData,
+    ) {
+        if let Some(file_content) = self.file_data.get(&ino) {
+            if offset < file_content.len() as i64 {
+                let data = &file_content[offset as usize..];
+                reply.data(data);
+            } else {
+                reply.data(&[]); //EOF
+            }
+        } else {
+            reply.error(ENOENT);
+        }
     }
 }
