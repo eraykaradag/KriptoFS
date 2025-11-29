@@ -4,7 +4,7 @@ use fuser::{
 use libc::{EEXIST, ENOENT, ENOTDIR};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const TTL: Duration = Duration::from_secs(1); // 1 second
 
@@ -132,15 +132,15 @@ impl Filesystem for KriptoFs {
 
         let ino = self.next_inode;
         self.next_inode += 1;
-
+        let ts = SystemTime::now();
         let attr = FileAttr {
             ino,
             size: 0,
             blocks: 0,
-            atime: UNIX_EPOCH, // 1970-01-01 00:00:00
-            mtime: UNIX_EPOCH,
-            ctime: UNIX_EPOCH,
-            crtime: UNIX_EPOCH,
+            atime: ts,
+            mtime: ts,
+            ctime: ts,
+            crtime: ts,
             kind: FileType::Directory,
             perm: 0o755,
             nlink: 2,
@@ -176,23 +176,24 @@ impl Filesystem for KriptoFs {
                 return;
             }
         }
-
+        let uid = _req.uid();
+        let gid = _req.gid();
         let ino = self.next_inode;
         self.next_inode += 1;
-
+        let ts = SystemTime::now();
         let attr = FileAttr {
             ino,
             size: 0,
             blocks: 0,
-            atime: UNIX_EPOCH, // 1970-01-01 00:00:00
-            mtime: UNIX_EPOCH,
-            ctime: UNIX_EPOCH,
-            crtime: UNIX_EPOCH,
+            atime: ts,
+            mtime: ts,
+            ctime: ts,
+            crtime: ts,
             kind: FileType::RegularFile,
             perm: 0o644,
             nlink: 1,
-            uid: 501,
-            gid: 20,
+            uid,
+            gid,
             rdev: 0,
             flags: 0,
             blksize: 512,
