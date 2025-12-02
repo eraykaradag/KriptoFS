@@ -1,7 +1,7 @@
 use fuser::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, Request,
 };
-use libc::{EEXIST, ENOENT, ENOTDIR};
+use libc::{EEXIST, ENOENT, ENOTDIR, EPERM};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -258,7 +258,9 @@ impl Filesystem for KriptoFs {
                     let decrypted_data = cryption::decrypt_message(data);
                     reply.data(&decrypted_data);
                 } else {
-                    reply.data(data);
+                    let hex_view: String = data.iter().map(|b| format!("{:02X}", b)).collect();
+                    let hex_bytes = hex_view.into_bytes();
+                    reply.data(&hex_bytes[offset as usize..]);
                 }
             } else {
                 reply.data(&[]); //EOF
@@ -285,6 +287,11 @@ impl Filesystem for KriptoFs {
         flags: Option<u32>,
         reply: ReplyAttr,
     ) {
+        let file_owner = self.attrs.get(&ino).expect("File not exist").uid;
+        if _req.uid() != file_owner {
+            reply.error(EPERM);
+            return;
+        }
         if let Some(new_size) = size {
             if let Some(file_content) = self.file_data.get_mut(&ino) {
                 file_content.resize(new_size as usize, 0);
