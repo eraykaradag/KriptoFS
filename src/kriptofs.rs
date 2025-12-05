@@ -102,7 +102,7 @@ impl Filesystem for KriptoFs {
 
         if let Some(children) = self.tree.get(&ino) {
             for (name, &child_ino) in children {
-                let kind = self.attrs.get(&ino).unwrap().kind;
+                let kind = self.attrs.get(&child_ino).unwrap().kind;
                 entries.push((child_ino, kind, name.clone()));
             }
         }
