@@ -1,7 +1,7 @@
 use fuser::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, Request,
 };
-use libc::{EEXIST, ENOENT, ENOTDIR, EPERM};
+use libc::{EEXIST, EIO, ENOENT, ENOTDIR, EPERM};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -221,14 +221,19 @@ impl Filesystem for KriptoFs {
         reply: fuser::ReplyWrite,
     ) {
         if let Some(file_content) = self.file_data.get_mut(&ino) {
-            let encrypted_data = cryption::encrypt_message(data);
-
-            let end = offset as usize + encrypted_data.len();
-
-            if end > file_content.len() {
-                file_content.resize(end, 0);
+            let mut plain_text = if file_content.is_empty() {
+                Vec::new()
+            } else {
+                cryption::decrypt_message(file_content)
+            };
+            if offset as usize + data.len() > plain_text.len() {
+                plain_text.resize(offset as usize + data.len(), 0);
             }
-            file_content[offset as usize..end].copy_from_slice(&encrypted_data);
+            plain_text[offset as usize..(offset as usize + data.len())].copy_from_slice(data);
+
+            let encrypted_data = cryption::encrypt_message(&plain_text);
+
+            *file_content = encrypted_data;
 
             if let Some(attr) = self.attrs.get_mut(&ino) {
                 attr.size = file_content.len() as u64;
